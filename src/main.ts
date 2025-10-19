@@ -51,6 +51,7 @@ myCanvas.addEventListener("mouseup", (_e: MouseEvent) => {
 
 document.body.append(document.createElement("br"));
 
+// Clear, Undo, Redo buttons
 const clearButton = document.createElement("button");
 clearButton.innerHTML = "clear";
 document.body.append(clearButton);
@@ -65,11 +66,7 @@ undoButton.innerHTML = "undo";
 document.body.append(undoButton);
 
 undoButton.addEventListener("click", () => {
-  if (lines.length > 0) {
-    const popped = lines.pop();
-    if (popped) redoLines.push(popped);
-    myCanvas.dispatchEvent(new Event("drawing-changed"));
-  }
+  undo();
 });
 
 const redoButton = document.createElement("button");
@@ -77,12 +74,22 @@ redoButton.innerHTML = "redo";
 document.body.append(redoButton);
 
 redoButton.addEventListener("click", () => {
-  if (redoLines.length > 0) {
-    const popped = redoLines.pop();
-    if (popped) lines.push(popped);
-    myCanvas.dispatchEvent(new Event("drawing-changed"));
-  }
+  redo();
 });
+
+function undo() {
+  if (lines.length === 0) return;
+  const popped = lines.pop();
+  if (popped) redoLines.push(popped);
+  myCanvas.dispatchEvent(new Event("drawing-changed"));
+}
+
+function redo() {
+  if (redoLines.length === 0) return;
+  const popped = redoLines.pop();
+  if (popped) lines.push(popped);
+  myCanvas.dispatchEvent(new Event("drawing-changed"));
+}
 
 // Observer: when the drawing changes, clear and redraw lines
 myCanvas.addEventListener("drawing-changed", () => {
