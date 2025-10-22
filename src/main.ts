@@ -17,7 +17,16 @@ let cursor: CursorCommand | null = null; //
 
 const bus = new EventTarget();
 
+let currentThickness = 2; // default
+
 // --- Tools ---
+function selectButton(button: HTMLButtonElement) {
+  document.querySelectorAll("button").forEach((b) =>
+    b.classList.remove("selectedTool")
+  );
+  button.classList.add("selectedTool");
+}
+
 function notify(name: string) {
   bus.dispatchEvent(new Event(name));
 }
@@ -50,9 +59,11 @@ interface Drawable {
 
 class LineCommand implements Drawable {
   private points: Point[] = [];
+  private thickness: number;
 
-  constructor(x: number, y: number) {
+  constructor(x: number, y: number, thickness: number) {
     this.points.push({ x, y });
+    this.thickness = thickness;
   }
 
   drag(x: number, y: number) {
@@ -61,6 +72,9 @@ class LineCommand implements Drawable {
 
   display(ctx: CanvasRenderingContext2D) {
     if (this.points.length < 2) return;
+
+    ctx.lineWidth = this.thickness;
+    ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(this.points[0].x, this.points[0].y);
     for (let i = 1; i < this.points.length; i++) {
@@ -103,7 +117,7 @@ myCanvas.addEventListener("mouseenter", (e) => {
 });
 
 myCanvas.addEventListener("mousedown", (e: MouseEvent) => {
-  currentLine = new LineCommand(e.offsetX, e.offsetY);
+  currentLine = new LineCommand(e.offsetX, e.offsetY, currentThickness);
   commands.push(currentLine);
   redoCommands.splice(0, redoCommands.length);
   notify("drawing-changed");
@@ -164,3 +178,23 @@ function redo() {
   if (popped) commands.push(popped);
   notify("drawing-changed");
 }
+
+const thinButton = document.createElement("button");
+thinButton.innerHTML = "thin";
+document.body.append(thinButton);
+
+thinButton.addEventListener("click", () => {
+  currentThickness = 2;
+  selectButton(thinButton);
+  notify("drawing-changed");
+});
+
+const thickButton = document.createElement("button");
+thickButton.innerHTML = "thick";
+document.body.append(thickButton);
+
+thickButton.addEventListener("click", () => {
+  currentThickness = 8;
+  selectButton(thickButton);
+  notify("drawing-changed");
+});

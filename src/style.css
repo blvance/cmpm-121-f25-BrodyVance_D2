@@ -9,3 +9,8 @@
   border: 2px solid black;
   filter: drop-shadow(7px 7px 7px gray);
 }
+
+.selectedTool {
+  background-color: #0099ff;
+  color: white;
+}
