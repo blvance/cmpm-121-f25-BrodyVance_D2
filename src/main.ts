@@ -17,7 +17,10 @@ let cursor: CursorCommand | null = null; //
 
 const bus = new EventTarget();
 
-let currentThickness = 2; // default
+let currentThickness = 4; // default
+
+// Tool preview (nullable) - shows the tool the user will draw with when mouse is over canvas and not down
+let toolPreview: ToolPreview | null = null;
 
 // --- Tools ---
 function selectButton(button: HTMLButtonElement) {
@@ -39,10 +42,16 @@ function redraw() {
   if (cursor) {
     cursor.display(ctx); //
   }
+
+  // Draw the tool preview if available and the user isn't currently drawing
+  if (toolPreview && !currentLine) {
+    toolPreview.display(ctx);
+  }
 }
 
 bus.addEventListener("drawing-changed", redraw);
 bus.addEventListener("cursor-changed", redraw);
+bus.addEventListener("tool-moved", redraw);
 
 function tick() {
   redraw();
@@ -99,8 +108,39 @@ class CursorCommand implements Drawable {
   }
 
   display(ctx: CanvasRenderingContext2D) {
-    ctx.font = "32px monospace";
-    ctx.fillText("*", this.x - 8, this.y + 16);
+    // Cursor star removed — keep this method intentionally blank so nothing
+    // is drawn for the cursor itself. Tool preview handles the visible cue.
+    void ctx; // keep ctx referenced to satisfy linters
+  }
+}
+
+// --- Tool Preview Command ---
+class ToolPreview implements Drawable {
+  private x: number;
+  private y: number;
+  private thickness: number;
+
+  constructor(x: number, y: number, thickness: number) {
+    this.x = x;
+    this.y = y;
+    this.thickness = thickness;
+  }
+
+  update(x: number, y: number, thickness: number) {
+    this.x = x;
+    this.y = y;
+    this.thickness = thickness;
+  }
+
+  display(ctx: CanvasRenderingContext2D) {
+    // draw a circle representing the marker tip; radius based on thickness
+    const radius = Math.max(1, this.thickness / 2);
+    ctx.save();
+    ctx.beginPath();
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.arc(this.x, this.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -108,12 +148,18 @@ class CursorCommand implements Drawable {
 
 myCanvas.addEventListener("mouseout", (_e) => {
   cursor = null;
+  // clear preview when leaving canvas
+  toolPreview = null;
   notify("cursor-changed");
+  notify("tool-moved");
 });
 
 myCanvas.addEventListener("mouseenter", (e) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
+  // create initial tool preview when entering
+  toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
   notify("cursor-changed");
+  notify("tool-moved");
 });
 
 myCanvas.addEventListener("mousedown", (e: MouseEvent) => {
@@ -127,6 +173,16 @@ myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
   notify("cursor-changed");
 
+  // update or create the tool preview when moving the mouse; only visible when not drawing
+  if (!currentLine) {
+    if (toolPreview) {
+      toolPreview.update(e.offsetX, e.offsetY, currentThickness);
+    } else {
+      toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
+    }
+    notify("tool-moved");
+  }
+
   if (e.buttons == 1 && currentLine) {
     currentLine.drag(e.offsetX, e.offsetY);
     notify("drawing-changed");
@@ -135,6 +191,8 @@ myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
 
 myCanvas.addEventListener("mouseup", () => {
   currentLine = null;
+  // restore preview after finishing a stroke at last mouse position
+  // keep existing toolPreview (it will be drawn since currentLine is null)
   notify("drawing-changed");
 });
 
@@ -184,7 +242,7 @@ thinButton.innerHTML = "thin";
 document.body.append(thinButton);
 
 thinButton.addEventListener("click", () => {
-  currentThickness = 2;
+  currentThickness = 4;
   selectButton(thinButton);
   notify("drawing-changed");
 });

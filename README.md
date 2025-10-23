@@ -11,3 +11,12 @@ Step 4 Complete. Refractored my undo and redo events into more readable function
 Step 5 Complete. Created a LineCommand class that represents a continuous marker line drawn by the user. Created a CursorCommand class that represent the users' cursor position on the canvas. There are two stacks for managing drawing history. A small event bus (bus) was introduced to manage redraws, Custom events ("drawing-changed", "cursor-changed") trigger canvas updates. This keeps the display logic separate from input handling. Added more mouse events like mouseout and mouseenter for handling the visibility of the cursor on the canvas. Event handlers for buttons refractored after creating command history. Created a redraw() function that clears canvas and re-renders making sure users actions are displayed fast. This refactor organizes the app around command objects that encapsulate their own rendering behavior. The user experience remains identical.
 
 Step 6 Complete. Added more feature to the drawing tool adding a thick and thin button. Added a indicator using CSS styling to give the user feedback about which tool is selected. (e.g. add a "selectedTool" class to the button associated with that tool).
+
+Step 7 complete Implement tool preview system and 'tool-moved' event
+-Added a new Drawable class, ToolPreviewCommand, which renders a circular brush preview matching the current line thickness.
+-Introduced a new global variable toolPreview to hold a nullable reference to the preview object.
+-dded support for a new "tool-moved" event, fired on mouse movement when the user is not drawing.
+-Updated the mousemove listener to update or create the tool preview and dispatch "tool-moved" events accordingly.
+-Modified redraw() to include the tool preview when the mouse is hovering but not actively drawing.
+-Ensured the preview is hidden when the mouse leaves the canvas or during drawing (on mousedown).
+This update improves user feedback by providing a visual indicator of the tool’s active size and position before drawing.
