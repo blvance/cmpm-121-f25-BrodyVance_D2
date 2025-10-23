@@ -9,20 +9,33 @@ const myCanvas = document.getElementById("myCanvas") as HTMLCanvasElement;
 const ctx = myCanvas.getContext("2d")!;
 
 // Drawing State
-const commands: LineCommand[] = [];
-const redoCommands: LineCommand[] = [];
+const commands: Drawable[] = [];
+const redoCommands: Drawable[] = [];
 
-let currentLine: LineCommand | null = null; //
+let currentLine: Drawable | null = null; //
 let cursor: CursorCommand | null = null; //
 
 const bus = new EventTarget();
 
 let currentThickness = 4; // default
 
+// Current tool: either "marker" (default) or an emoji string for sticker tools
+let currentTool: "marker" | string = "marker";
+
 // Tool preview (nullable) - shows the tool the user will draw with when mouse is over canvas and not down
-let toolPreview: ToolPreview | null = null;
+let toolPreview: Drawable | null = null;
 
 // --- Tools ---
+
+// Type guard for objects that support drag(x,y)
+function isDraggable(
+  obj: Drawable | null,
+): obj is Drawable & { drag(x: number, y: number): void } {
+  if (!obj) return false;
+  const maybe = obj as unknown as { drag?: unknown };
+  return typeof maybe.drag === "function";
+}
+
 function selectButton(button: HTMLButtonElement) {
   document.querySelectorAll("button").forEach((b) =>
     b.classList.remove("selectedTool")
@@ -64,6 +77,62 @@ type Point = { x: number; y: number };
 
 interface Drawable {
   display(ctx: CanvasRenderingContext2D): void;
+}
+
+// --- Sticker command and preview ---
+class StickerCommand implements Drawable {
+  private x: number;
+  private y: number;
+  private emoji: string;
+
+  constructor(x: number, y: number, emoji: string) {
+    this.x = x;
+    this.y = y;
+    this.emoji = emoji;
+  }
+
+  // reposition the sticker when dragged
+  drag(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+
+  display(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.font = `${Math.max(12, currentThickness * 3)}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.restore();
+  }
+}
+
+class StickerPreview implements Drawable {
+  private x: number;
+  private y: number;
+  private emoji: string;
+
+  constructor(x: number, y: number, emoji: string) {
+    this.x = x;
+    this.y = y;
+    this.emoji = emoji;
+  }
+
+  update(x: number, y: number, _thickness: number, emoji?: string) {
+    this.x = x;
+    this.y = y;
+    if (emoji) this.emoji = emoji;
+  }
+
+  display(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    ctx.font = `${Math.max(12, currentThickness * 3)}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.restore();
+  }
 }
 
 class LineCommand implements Drawable {
@@ -156,15 +225,27 @@ myCanvas.addEventListener("mouseout", (_e) => {
 
 myCanvas.addEventListener("mouseenter", (e) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
-  // create initial tool preview when entering
-  toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
+  // create initial tool preview when entering based on current tool
+  if (currentTool === "marker") {
+    toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
+  } else {
+    toolPreview = new StickerPreview(e.offsetX, e.offsetY, currentTool);
+  }
   notify("cursor-changed");
   notify("tool-moved");
 });
 
 myCanvas.addEventListener("mousedown", (e: MouseEvent) => {
-  currentLine = new LineCommand(e.offsetX, e.offsetY, currentThickness);
-  commands.push(currentLine);
+  // If current tool is a sticker, create a sticker command and allow dragging to reposition
+  if (currentTool === "marker") {
+    currentLine = new LineCommand(e.offsetX, e.offsetY, currentThickness);
+    commands.push(currentLine);
+  } else {
+    const sticker = new StickerCommand(e.offsetX, e.offsetY, currentTool);
+    commands.push(sticker);
+    // allow dragging to reposition sticker
+    currentLine = sticker as unknown as LineCommand;
+  }
   redoCommands.splice(0, redoCommands.length);
   notify("drawing-changed");
 });
@@ -175,16 +256,36 @@ myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
 
   // update or create the tool preview when moving the mouse; only visible when not drawing
   if (!currentLine) {
-    if (toolPreview) {
-      toolPreview.update(e.offsetX, e.offsetY, currentThickness);
+    if (currentTool === "marker") {
+      if (toolPreview) {
+        (toolPreview as ToolPreview).update(
+          e.offsetX,
+          e.offsetY,
+          currentThickness,
+        );
+      } else {
+        toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
+      }
     } else {
-      toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
+      if (toolPreview) {
+        (toolPreview as StickerPreview).update(
+          e.offsetX,
+          e.offsetY,
+          currentThickness,
+          currentTool,
+        );
+      } else {
+        toolPreview = new StickerPreview(e.offsetX, e.offsetY, currentTool);
+      }
     }
     notify("tool-moved");
   }
 
   if (e.buttons == 1 && currentLine) {
-    currentLine.drag(e.offsetX, e.offsetY);
+    // call drag only if the current line/sticker exposes a drag method
+    if (isDraggable(currentLine)) {
+      currentLine.drag(e.offsetX, e.offsetY);
+    }
     notify("drawing-changed");
   }
 });
@@ -195,6 +296,24 @@ myCanvas.addEventListener("mouseup", () => {
   // keep existing toolPreview (it will be drawn since currentLine is null)
   notify("drawing-changed");
 });
+
+// --- Sticker buttons ---
+function makeStickerButton(emoji: string) {
+  const b = document.createElement("button");
+  b.textContent = emoji;
+  b.addEventListener("click", () => {
+    currentTool = emoji;
+    // don't show a preview until the cursor is over the canvas
+    toolPreview = null;
+    notify("tool-moved");
+  });
+  document.body.append(b);
+  return b;
+}
+
+makeStickerButton("🌟");
+makeStickerButton("🔥");
+makeStickerButton("🎯");
 
 // --- Clear, Undo, Redo buttons ---
 const clearButton = document.createElement("button");

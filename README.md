@@ -20,3 +20,6 @@ Step 7 complete Implement tool preview system and 'tool-moved' event
 -Modified redraw() to include the tool preview when the mouse is hovering but not actively drawing.
 -Ensured the preview is hidden when the mouse leaves the canvas or during drawing (on mousedown).
 This update improves user feedback by providing a visual indicator of the tool’s active size and position before drawing.
+
+Step 8 complete
+Implemented Step 8 by adding multiple sticker tools (🚀🐱🌸) with dynamic preview and placement features. Introduced StickerCommand and StickerPreview classes to handle sticker rendering, position tracking, and real-time movement updates during user interaction. Integrated sticker selection into the existing tool system to support seamless switching between stickers and other tools. Updated mouse event handling to enable precise sticker placement and dragging, added visual feedback for hover and tool selection, and refined the display list to ensure stickers render consistently alongside other commands.
