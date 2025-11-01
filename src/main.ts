@@ -12,22 +12,18 @@ const ctx = myCanvas.getContext("2d")!;
 const commands: Drawable[] = [];
 const redoCommands: Drawable[] = [];
 
-let currentLine: Drawable | null = null; //
-let cursor: CursorCommand | null = null; //
+let currentLine: Drawable | null = null;
+let cursor: CursorCommand | null = null;
 
 const bus = new EventTarget();
 
 let currentThickness = 4; // default
+let currentTool: "marker" | string = "marker"; // marker is default
 
-// Current tool: either "marker" (default) or an emoji string for sticker tools
-let currentTool: "marker" | string = "marker";
-
-// Tool preview (nullable) - shows the tool the user will draw with when mouse is over canvas and not down
 let toolPreview: Drawable | null = null;
 
 // --- Tools ---
 
-// Type guard for objects that support drag(x,y)
 function isDraggable(
   obj: Drawable | null,
 ): obj is Drawable & { drag(x: number, y: number): void } {
@@ -50,13 +46,12 @@ function notify(name: string) {
 function redraw() {
   ctx.clearRect(0, 0, myCanvas.width, myCanvas.height);
 
-  commands.forEach((cmd) => cmd.display(ctx)); //
+  commands.forEach((cmd) => cmd.display(ctx));
 
   if (cursor) {
-    cursor.display(ctx); //
+    cursor.display(ctx);
   }
 
-  // Draw the tool preview if available and the user isn't currently drawing
   if (toolPreview && !currentLine) {
     toolPreview.display(ctx);
   }
@@ -73,13 +68,13 @@ function tick() {
 tick();
 
 // --- Drawing Classes ---
+
 type Point = { x: number; y: number };
 
 interface Drawable {
   display(ctx: CanvasRenderingContext2D): void;
 }
 
-// --- Sticker command and preview ---
 class StickerCommand implements Drawable {
   private x: number;
   private y: number;
@@ -91,7 +86,6 @@ class StickerCommand implements Drawable {
     this.emoji = emoji;
   }
 
-  // reposition the sticker when dragged
   drag(x: number, y: number) {
     this.x = x;
     this.y = y;
@@ -99,7 +93,7 @@ class StickerCommand implements Drawable {
 
   display(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    ctx.font = `${Math.max(12, currentThickness * 3)}px serif`;
+    ctx.font = "32px serif"; // ✅ fixed sticker size (no thickness influence)
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.emoji, this.x, this.y);
@@ -127,7 +121,7 @@ class StickerPreview implements Drawable {
   display(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.globalAlpha = 0.6;
-    ctx.font = `${Math.max(12, currentThickness * 3)}px serif`;
+    ctx.font = "32px serif"; // preview stays same size
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.emoji, this.x, this.y);
@@ -177,13 +171,10 @@ class CursorCommand implements Drawable {
   }
 
   display(ctx: CanvasRenderingContext2D) {
-    // Cursor star removed — keep this method intentionally blank so nothing
-    // is drawn for the cursor itself. Tool preview handles the visible cue.
-    void ctx; // keep ctx referenced to satisfy linters
+    void ctx;
   }
 }
 
-// --- Tool Preview Command ---
 class ToolPreview implements Drawable {
   private x: number;
   private y: number;
@@ -202,7 +193,6 @@ class ToolPreview implements Drawable {
   }
 
   display(ctx: CanvasRenderingContext2D) {
-    // draw a circle representing the marker tip; radius based on thickness
     const radius = Math.max(1, this.thickness / 2);
     ctx.save();
     ctx.beginPath();
@@ -217,7 +207,6 @@ class ToolPreview implements Drawable {
 
 myCanvas.addEventListener("mouseout", (_e) => {
   cursor = null;
-  // clear preview when leaving canvas
   toolPreview = null;
   notify("cursor-changed");
   notify("tool-moved");
@@ -225,7 +214,6 @@ myCanvas.addEventListener("mouseout", (_e) => {
 
 myCanvas.addEventListener("mouseenter", (e) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
-  // create initial tool preview when entering based on current tool
   if (currentTool === "marker") {
     toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
   } else {
@@ -236,14 +224,12 @@ myCanvas.addEventListener("mouseenter", (e) => {
 });
 
 myCanvas.addEventListener("mousedown", (e: MouseEvent) => {
-  // If current tool is a sticker, create a sticker command and allow dragging to reposition
   if (currentTool === "marker") {
     currentLine = new LineCommand(e.offsetX, e.offsetY, currentThickness);
     commands.push(currentLine);
   } else {
     const sticker = new StickerCommand(e.offsetX, e.offsetY, currentTool);
     commands.push(sticker);
-    // allow dragging to reposition sticker
     currentLine = sticker as unknown as LineCommand;
   }
   redoCommands.splice(0, redoCommands.length);
@@ -254,7 +240,6 @@ myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
   notify("cursor-changed");
 
-  // update or create the tool preview when moving the mouse; only visible when not drawing
   if (!currentLine) {
     if (currentTool === "marker") {
       if (toolPreview) {
@@ -282,7 +267,6 @@ myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
   }
 
   if (e.buttons == 1 && currentLine) {
-    // call drag only if the current line/sticker exposes a drag method
     if (isDraggable(currentLine)) {
       currentLine.drag(e.offsetX, e.offsetY);
     }
@@ -292,19 +276,18 @@ myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
 
 myCanvas.addEventListener("mouseup", () => {
   currentLine = null;
-  // restore preview after finishing a stroke at last mouse position
-  // keep existing toolPreview (it will be drawn since currentLine is null)
   notify("drawing-changed");
 });
 
 // --- Sticker buttons ---
+
 function makeStickerButton(emoji: string) {
   const b = document.createElement("button");
   b.textContent = emoji;
   b.addEventListener("click", () => {
     currentTool = emoji;
-    // don't show a preview until the cursor is over the canvas
     toolPreview = null;
+    selectButton(b);
     notify("tool-moved");
   });
   document.body.append(b);
@@ -316,6 +299,7 @@ makeStickerButton("🔥");
 makeStickerButton("🎯");
 
 // --- Clear, Undo, Redo buttons ---
+
 const clearButton = document.createElement("button");
 clearButton.innerHTML = "clear";
 document.body.append(clearButton);
@@ -356,13 +340,25 @@ function redo() {
   notify("drawing-changed");
 }
 
+// --- Thickness buttons + Marker select button ---
+
+const markerButton = document.createElement("button");
+markerButton.innerHTML = "marker";
+document.body.append(markerButton);
+
+markerButton.addEventListener("click", () => {
+  currentTool = "marker";
+  selectButton(markerButton);
+  notify("tool-moved");
+});
+
 const thinButton = document.createElement("button");
 thinButton.innerHTML = "thin";
 document.body.append(thinButton);
 
 thinButton.addEventListener("click", () => {
   currentThickness = 4;
-  selectButton(thinButton);
+  if (currentTool === "marker") selectButton(thinButton);
   notify("drawing-changed");
 });
 
@@ -372,6 +368,15 @@ document.body.append(thickButton);
 
 thickButton.addEventListener("click", () => {
   currentThickness = 8;
-  selectButton(thickButton);
+  if (currentTool === "marker") selectButton(thickButton);
   notify("drawing-changed");
 });
+
+// --- Default state on load ✅ ---
+
+// Select marker + thin on startup
+selectButton(markerButton);
+selectButton(thinButton);
+currentTool = "marker";
+currentThickness = 4;
+notify("tool-moved");
