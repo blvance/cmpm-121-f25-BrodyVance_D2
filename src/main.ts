@@ -1,28 +1,40 @@
 import "./style.css";
 
+//
+// --- Canvas + DOM setup ---------------------------------------------
+//
 document.body.innerHTML = `
   <h1> D2 Assigment </h1>
-  <canvas id= "myCanvas" width="256" height="256" > </canvas>
+  <canvas id="myCanvas" width="256" height="256"></canvas>
 `;
 
 const myCanvas = document.getElementById("myCanvas") as HTMLCanvasElement;
 const ctx = myCanvas.getContext("2d")!;
 
-// Drawing State
+//
+// --- Global state & event bus --------------------------------------
+//
+const bus = new EventTarget();
+
+// Drawing state
 const commands: Drawable[] = [];
 const redoCommands: Drawable[] = [];
 
 let currentLine: Drawable | null = null;
 let cursor: CursorCommand | null = null;
 
-const bus = new EventTarget();
-
-let currentThickness = 4; // default
-let currentTool: "marker" | string = "marker"; // marker is default
+let currentThickness = 4; // default marker thickness (pixels)
+let lastThickness = 4; // remembers last-chosen thickness even when sticker selected
+let currentTool: "marker" | string = "marker"; // marker default
 
 let toolPreview: Drawable | null = null;
 
-// --- Tools ---
+//
+// --- Utilities & helpers -------------------------------------------
+//
+function notify(name: string) {
+  bus.dispatchEvent(new Event(name));
+}
 
 function isDraggable(
   obj: Drawable | null,
@@ -32,17 +44,29 @@ function isDraggable(
   return typeof maybe.drag === "function";
 }
 
-function selectButton(button: HTMLButtonElement) {
-  document.querySelectorAll("button").forEach((b) =>
-    b.classList.remove("selectedTool")
-  );
+// Button selection helpers (supports marker + thickness selected simultaneously)
+
+function clearToolSelections() {
+  // clear only tool-type buttons (marker + stickers)
+  const toolButtons = document.querySelectorAll("[data-tool-button]");
+  toolButtons.forEach((b) => b.classList.remove("selectedTool"));
+}
+function clearThicknessSelections() {
+  const thButtons = document.querySelectorAll("[data-thickness-button]");
+  thButtons.forEach((b) => b.classList.remove("selectedTool"));
+}
+function selectToolButton(button: HTMLButtonElement) {
+  clearToolSelections();
+  button.classList.add("selectedTool");
+}
+function selectThicknessButton(button: HTMLButtonElement) {
+  clearThicknessSelections();
   button.classList.add("selectedTool");
 }
 
-function notify(name: string) {
-  bus.dispatchEvent(new Event(name));
-}
-
+//
+// --- Rendering -----------------------------------------------------
+//
 function redraw() {
   ctx.clearRect(0, 0, myCanvas.width, myCanvas.height);
 
@@ -67,14 +91,16 @@ function tick() {
 }
 tick();
 
-// --- Drawing Classes ---
-
+//
+// --- Types & Drawable classes -------------------------------------
+//
 type Point = { x: number; y: number };
 
 interface Drawable {
   display(ctx: CanvasRenderingContext2D): void;
 }
 
+// Sticker command: fixed-size emoji independent of thickness
 class StickerCommand implements Drawable {
   private x: number;
   private y: number;
@@ -93,7 +119,7 @@ class StickerCommand implements Drawable {
 
   display(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    ctx.font = "32px serif"; // ✅ fixed sticker size (no thickness influence)
+    ctx.font = "32px serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.emoji, this.x, this.y);
@@ -121,7 +147,7 @@ class StickerPreview implements Drawable {
   display(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.globalAlpha = 0.6;
-    ctx.font = "32px serif"; // preview stays same size
+    ctx.font = "32px serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.emoji, this.x, this.y);
@@ -129,6 +155,7 @@ class StickerPreview implements Drawable {
   }
 }
 
+// Line command (marker strokes)
 class LineCommand implements Drawable {
   private points: Point[] = [];
   private thickness: number;
@@ -156,6 +183,7 @@ class LineCommand implements Drawable {
   }
 }
 
+// Cursor is intentionally blank (preview handles visible cue)
 class CursorCommand implements Drawable {
   private x: number;
   private y: number;
@@ -175,6 +203,7 @@ class CursorCommand implements Drawable {
   }
 }
 
+// Marker preview: circle sized by currentThickness
 class ToolPreview implements Drawable {
   private x: number;
   private y: number;
@@ -230,6 +259,7 @@ myCanvas.addEventListener("mousedown", (e: MouseEvent) => {
   } else {
     const sticker = new StickerCommand(e.offsetX, e.offsetY, currentTool);
     commands.push(sticker);
+    // allow dragging to reposition sticker
     currentLine = sticker as unknown as LineCommand;
   }
   redoCommands.splice(0, redoCommands.length);
@@ -240,6 +270,7 @@ myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
   notify("cursor-changed");
 
+  // update or create tool preview when not drawing
   if (!currentLine) {
     if (currentTool === "marker") {
       if (toolPreview) {
@@ -279,18 +310,79 @@ myCanvas.addEventListener("mouseup", () => {
   notify("drawing-changed");
 });
 
-// --- Sticker buttons ---
-
-function makeStickerButton(emoji: string) {
+//
+// --- Button creation helpers --------------------------------------
+//
+function makeButton(text: string) {
   const b = document.createElement("button");
-  b.textContent = emoji;
+  b.innerHTML = text;
+  document.body.append(b);
+  return b;
+}
+
+function makeToolButton(text: string) {
+  const b = makeButton(text);
+  b.setAttribute("data-tool-button", "1");
+  return b;
+}
+
+function makeThicknessButton(text: string) {
+  const b = makeButton(text);
+  b.setAttribute("data-thickness-button", "1");
+  return b;
+}
+
+//
+// --- UI Buttons (grouped logically) -------------------------------
+//
+
+// -- Tool + thickness row (marker + thin/thick)
+const markerButton = makeToolButton("marker");
+markerButton.addEventListener("click", () => {
+  currentTool = "marker";
+
+  // visually mark tool and thickness according to remembered thickness
+  selectToolButton(markerButton);
+  if (lastThickness === 4) {
+    selectThicknessButton(thinButton);
+  } else {
+    selectThicknessButton(thickButton);
+  }
+
+  // ensure currentThickness matches lastThickness when returning to marker
+  currentThickness = lastThickness;
+  notify("tool-moved");
+});
+
+// thickness buttons (always update remembered thickness; highlight only when marker active)
+const thinButton = makeThicknessButton("thin");
+thinButton.addEventListener("click", () => {
+  lastThickness = 4;
+  currentThickness = 4;
+  // highlight thin only if marker is currently selected
+  if (currentTool === "marker") selectThicknessButton(thinButton);
+  notify("drawing-changed");
+});
+
+const thickButton = makeThicknessButton("thick");
+thickButton.addEventListener("click", () => {
+  lastThickness = 8;
+  currentThickness = 8;
+  if (currentTool === "marker") selectThicknessButton(thickButton);
+  notify("drawing-changed");
+});
+
+// -- Sticker row
+function makeStickerButton(emoji: string) {
+  const b = makeToolButton(emoji);
   b.addEventListener("click", () => {
     currentTool = emoji;
+    // select only the sticker (tool) and clear thickness highlighting
+    selectToolButton(b);
+    clearThicknessSelections();
     toolPreview = null;
-    selectButton(b);
     notify("tool-moved");
   });
-  document.body.append(b);
   return b;
 }
 
@@ -298,24 +390,22 @@ makeStickerButton("🌟");
 makeStickerButton("🔥");
 makeStickerButton("🎯");
 
-// --- Clear, Undo, Redo buttons ---
+// -- History row (undo/redo/clear)
+const undoButton = makeButton("undo");
+undoButton.addEventListener("click", () => {
+  undo();
+});
 
-const clearButton = document.createElement("button");
-clearButton.innerHTML = "clear";
-document.body.append(clearButton);
+const redoButton = makeButton("redo");
+redoButton.addEventListener("click", () => {
+  redo();
+});
 
+const clearButton = makeButton("clear");
 clearButton.addEventListener("click", () => {
   commands.splice(0, commands.length);
   redoCommands.length = 0;
   notify("drawing-changed");
-});
-
-const undoButton = document.createElement("button");
-undoButton.innerHTML = "undo";
-document.body.append(undoButton);
-
-undoButton.addEventListener("click", () => {
-  undo();
 });
 
 function undo() {
@@ -325,14 +415,6 @@ function undo() {
   notify("drawing-changed");
 }
 
-const redoButton = document.createElement("button");
-redoButton.innerHTML = "redo";
-document.body.append(redoButton);
-
-redoButton.addEventListener("click", () => {
-  redo();
-});
-
 function redo() {
   if (redoCommands.length === 0) return;
   const popped = redoCommands.pop();
@@ -340,43 +422,13 @@ function redo() {
   notify("drawing-changed");
 }
 
-// --- Thickness buttons + Marker select button ---
-
-const markerButton = document.createElement("button");
-markerButton.innerHTML = "marker";
-document.body.append(markerButton);
-
-markerButton.addEventListener("click", () => {
-  currentTool = "marker";
-  selectButton(markerButton);
-  notify("tool-moved");
-});
-
-const thinButton = document.createElement("button");
-thinButton.innerHTML = "thin";
-document.body.append(thinButton);
-
-thinButton.addEventListener("click", () => {
-  currentThickness = 4;
-  if (currentTool === "marker") selectButton(thinButton);
-  notify("drawing-changed");
-});
-
-const thickButton = document.createElement("button");
-thickButton.innerHTML = "thick";
-document.body.append(thickButton);
-
-thickButton.addEventListener("click", () => {
-  currentThickness = 8;
-  if (currentTool === "marker") selectButton(thickButton);
-  notify("drawing-changed");
-});
-
-// --- Default state on load ✅ ---
-
-// Select marker + thin on startup
-selectButton(markerButton);
-selectButton(thinButton);
-currentTool = "marker";
+//
+// --- Default startup state ----------------------------------------
+//
 currentThickness = 4;
+lastThickness = 4;
+currentTool = "marker";
+// visually select marker + thin
+selectToolButton(markerButton);
+selectThicknessButton(thinButton);
 notify("tool-moved");
