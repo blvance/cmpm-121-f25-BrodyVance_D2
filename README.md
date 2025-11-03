@@ -27,9 +27,13 @@ Bug fixes for sticker and marker selection, code order refractoring, as well as 
 
 Step 9 complete
 Made sure stickers had a data driven design and that the user could have their own custom stickers. User can now create several custom stickers. Updated style.css to change to default look of the buttons because they were annoying me. Also made it so the marker UI interatcion shows that marker is selected and thin/thick so the user knows the thin/thick tools are connected to the marker tool specifically.
+
+Step 10 complete
 Added an "export" button and linked it to exportDrawing.
 Created a temporary 1024x1024 canvas and its context.
 Used exportCtx.scale(4, 4) to prepare the context for high-res drawing.
 Executed commands.forEach((cmd) => cmd.display(exportCtx)) to draw the content.
 Used toDataURL and an anchor tag to trigger the file download.
 I also made a necessary correction in the StickerCommand class: when the context is scaled up 4x for the export, text/font sizes must be scaled down 4x inside the display method to maintain the intended visual size in the final 1024x1024 image.
+
+Step 11 complete. Code Reorganized to make scrolling less of chore. Fully updated the Canvas DOM step so that I could create a good UI in style.css. Added UI style and functionality to style.css: added a button hover indication, added distinct sections for types of buttons and centered the canvas on the screen. Refractored certain varibles like currentthickness to strokeWIDTH.

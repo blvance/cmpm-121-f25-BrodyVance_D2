@@ -1,33 +1,78 @@
-.icon {
-  width: 64px;
-  vertical-align: top;
-  border: 1px solid salmon;
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center everything horizontally */
+  gap: 12px; /* Space between canvas and control rows */
+  background-color: #f4f4f4;
+  margin-top: 2rem;
+}
+
+h1 {
+  margin: 0;
+  font-weight: 300;
 }
 
 #myCanvas {
-  border-radius: 10px;
-  border: 2px solid black;
-  filter: drop-shadow(7px 7px 7px gray);
+  background-color: white;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  cursor: crosshair;
 }
 
-.selectedTool {
-  background-color: #0099ff;
-  color: white;
+/* A wrapper for all control rows */
+#controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Styles for each row of controls */
+.control-row {
+  display: flex;
+  justify-content: center; /* Center the fieldsets in the row */
+  gap: 10px;
+}
+
+fieldset {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  display: flex; /* Make buttons inside a fieldset horizontal */
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  background-color: #fff;
+  margin: 0;
+}
+
+legend {
+  font-weight: 600;
+  font-size: 0.9em;
+  padding: 0 4px;
 }
 
 button {
-  margin: 4px;
-  padding: 6px 10px;
-  font-size: 16px;
+  padding: 6px 12px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  font-size: 1em;
 }
 
-body {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-width: 320px;
+button:hover {
+  background-color: #eee;
 }
 
-.selectedTool {
-  outline: 2px solid blue;
+/* This is the class your JS adds */
+button.selectedTool {
+  background-color: #007bff;
+  color: white;
+  border-color: #0056b3;
+}
+
+/* Special container for stickers so they line up nicely */
+#sticker-buttons {
+  display: contents; /* This makes the buttons act as direct children of the fieldset */
 }
