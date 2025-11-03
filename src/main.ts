@@ -48,7 +48,9 @@ document.body.innerHTML = `
 const myCanvas = document.getElementById("myCanvas") as HTMLCanvasElement;
 const ctx = myCanvas.getContext("2d")!;
 // Tool Buttons
-const markerButton = document.getElementById("markerButton") as HTMLButtonElement;
+const markerButton = document.getElementById(
+  "markerButton",
+) as HTMLButtonElement;
 const customStickerBtn = document.getElementById(
   "customStickerBtn",
 ) as HTMLButtonElement;
@@ -62,7 +64,9 @@ const thickButton = document.getElementById("thickButton") as HTMLButtonElement;
 const undoButton = document.getElementById("undoButton") as HTMLButtonElement;
 const redoButton = document.getElementById("redoButton") as HTMLButtonElement;
 const clearButton = document.getElementById("clearButton") as HTMLButtonElement;
-const exportButton = document.getElementById("exportButton") as HTMLButtonElement;
+const exportButton = document.getElementById(
+  "exportButton",
+) as HTMLButtonElement;
 
 //// --- Global state & event bus --------------------------------------//
 // (This section is unchanged)
@@ -147,7 +151,7 @@ class StickerCommand implements DraggableDrawable {
 
   display(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    
+
     ctx.font = `32px serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -235,10 +239,9 @@ myCanvas.addEventListener("mouseout", () => {
 
 myCanvas.addEventListener("mouseenter", (e) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
-  toolPreview =
-    currentTool === "marker"
-      ? new ToolPreview(e.offsetX, e.offsetY, STROKE_WIDTH)
-      : new StickerPreview(e.offsetX, e.offsetY, currentTool);
+  toolPreview = currentTool === "marker"
+    ? new ToolPreview(e.offsetX, e.offsetY, STROKE_WIDTH)
+    : new StickerPreview(e.offsetX, e.offsetY, currentTool);
   notify("cursor-changed");
   notify("tool-moved");
 });
