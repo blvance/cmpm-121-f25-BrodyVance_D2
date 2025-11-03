@@ -14,3 +14,20 @@
   background-color: #0099ff;
   color: white;
 }
+
+button {
+  margin: 4px;
+  padding: 6px 10px;
+  font-size: 16px;
+}
+
+body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 320px;
+}
+
+.selectedTool {
+  outline: 2px solid blue;
+}

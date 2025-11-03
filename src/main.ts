@@ -19,13 +19,13 @@ const bus = new EventTarget();
 // Drawing state
 const commands: Drawable[] = [];
 const redoCommands: Drawable[] = [];
-
-let currentLine: Drawable | null = null;
+const stickers: string[] = ["⭐", "🔥", "🍀", "💧"];
+let currentLine: DraggableDrawable | null = null;
 let cursor: CursorCommand | null = null;
 
-let currentThickness = 4; // default marker thickness (pixels)
-let lastThickness = 4; // remembers last-chosen thickness even when sticker selected
-let currentTool: "marker" | string = "marker"; // marker default
+let currentThickness = 4; // default marker thickness
+let lastThickness = 4;
+let currentTool: "marker" | string = "marker";
 
 let toolPreview: Drawable | null = null;
 
@@ -35,25 +35,23 @@ let toolPreview: Drawable | null = null;
 function notify(name: string) {
   bus.dispatchEvent(new Event(name));
 }
-
 function isDraggable(
   obj: Drawable | null,
 ): obj is Drawable & { drag(x: number, y: number): void } {
   if (!obj) return false;
-  const maybe = obj as unknown as { drag?: unknown };
-  return typeof maybe.drag === "function";
+  return typeof (obj as Partial<{ drag: unknown }>).drag === "function";
 }
 
-// Button selection helpers (supports marker + thickness selected simultaneously)
-
+// Button selection helpers
 function clearToolSelections() {
-  // clear only tool-type buttons (marker + stickers)
-  const toolButtons = document.querySelectorAll("[data-tool-button]");
-  toolButtons.forEach((b) => b.classList.remove("selectedTool"));
+  document
+    .querySelectorAll("[data-tool-button]")
+    .forEach((b) => b.classList.remove("selectedTool"));
 }
 function clearThicknessSelections() {
-  const thButtons = document.querySelectorAll("[data-thickness-button]");
-  thButtons.forEach((b) => b.classList.remove("selectedTool"));
+  document
+    .querySelectorAll("[data-thickness-button]")
+    .forEach((b) => b.classList.remove("selectedTool"));
 }
 function selectToolButton(button: HTMLButtonElement) {
   clearToolSelections();
@@ -71,14 +69,8 @@ function redraw() {
   ctx.clearRect(0, 0, myCanvas.width, myCanvas.height);
 
   commands.forEach((cmd) => cmd.display(ctx));
-
-  if (cursor) {
-    cursor.display(ctx);
-  }
-
-  if (toolPreview && !currentLine) {
-    toolPreview.display(ctx);
-  }
+  if (cursor) cursor.display(ctx);
+  if (toolPreview && !currentLine) toolPreview.display(ctx);
 }
 
 bus.addEventListener("drawing-changed", redraw);
@@ -100,17 +92,12 @@ interface Drawable {
   display(ctx: CanvasRenderingContext2D): void;
 }
 
-// Sticker command: fixed-size emoji independent of thickness
-class StickerCommand implements Drawable {
-  private x: number;
-  private y: number;
-  private emoji: string;
+interface DraggableDrawable extends Drawable {
+  drag(x: number, y: number): void;
+}
 
-  constructor(x: number, y: number, emoji: string) {
-    this.x = x;
-    this.y = y;
-    this.emoji = emoji;
-  }
+class StickerCommand implements DraggableDrawable {
+  constructor(private x: number, private y: number, private emoji: string) {}
 
   drag(x: number, y: number) {
     this.x = x;
@@ -128,15 +115,7 @@ class StickerCommand implements Drawable {
 }
 
 class StickerPreview implements Drawable {
-  private x: number;
-  private y: number;
-  private emoji: string;
-
-  constructor(x: number, y: number, emoji: string) {
-    this.x = x;
-    this.y = y;
-    this.emoji = emoji;
-  }
+  constructor(private x: number, private y: number, private emoji: string) {}
 
   update(x: number, y: number, _thickness: number, emoji?: string) {
     this.x = x;
@@ -155,23 +134,16 @@ class StickerPreview implements Drawable {
   }
 }
 
-// Line command (marker strokes)
-class LineCommand implements Drawable {
+class LineCommand implements DraggableDrawable {
   private points: Point[] = [];
-  private thickness: number;
-
-  constructor(x: number, y: number, thickness: number) {
+  constructor(x: number, y: number, private thickness: number) {
     this.points.push({ x, y });
-    this.thickness = thickness;
   }
-
   drag(x: number, y: number) {
     this.points.push({ x, y });
   }
-
   display(ctx: CanvasRenderingContext2D) {
     if (this.points.length < 2) return;
-
     ctx.lineWidth = this.thickness;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -183,58 +155,41 @@ class LineCommand implements Drawable {
   }
 }
 
-// Cursor is intentionally blank (preview handles visible cue)
 class CursorCommand implements Drawable {
-  private x: number;
-  private y: number;
-
-  constructor(x: number, y: number) {
-    this.x = x;
-    this.y = y;
-  }
-
+  constructor(private x: number, private y: number) {}
   update(x: number, y: number) {
     this.x = x;
     this.y = y;
   }
-
-  display(ctx: CanvasRenderingContext2D) {
-    void ctx;
-  }
+  display(_ctx: CanvasRenderingContext2D) {}
 }
 
-// Marker preview: circle sized by currentThickness
 class ToolPreview implements Drawable {
-  private x: number;
-  private y: number;
-  private thickness: number;
-
-  constructor(x: number, y: number, thickness: number) {
-    this.x = x;
-    this.y = y;
-    this.thickness = thickness;
-  }
-
+  constructor(
+    private x: number,
+    private y: number,
+    private thickness: number,
+  ) {}
   update(x: number, y: number, thickness: number) {
     this.x = x;
     this.y = y;
     this.thickness = thickness;
   }
-
   display(ctx: CanvasRenderingContext2D) {
-    const radius = Math.max(1, this.thickness / 2);
+    const r = Math.max(1, this.thickness / 2);
     ctx.save();
     ctx.beginPath();
     ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.arc(this.x, this.y, radius, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 }
 
-// --- Mouse Handling ---
-
-myCanvas.addEventListener("mouseout", (_e) => {
+//
+// --- Mouse Handling ------------------------------------------------
+//
+myCanvas.addEventListener("mouseout", () => {
   cursor = null;
   toolPreview = null;
   notify("cursor-changed");
@@ -243,64 +198,52 @@ myCanvas.addEventListener("mouseout", (_e) => {
 
 myCanvas.addEventListener("mouseenter", (e) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
-  if (currentTool === "marker") {
-    toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
-  } else {
-    toolPreview = new StickerPreview(e.offsetX, e.offsetY, currentTool);
-  }
+  toolPreview = currentTool === "marker"
+    ? new ToolPreview(e.offsetX, e.offsetY, currentThickness)
+    : new StickerPreview(e.offsetX, e.offsetY, currentTool);
   notify("cursor-changed");
   notify("tool-moved");
 });
 
-myCanvas.addEventListener("mousedown", (e: MouseEvent) => {
+myCanvas.addEventListener("mousedown", (e) => {
   if (currentTool === "marker") {
     currentLine = new LineCommand(e.offsetX, e.offsetY, currentThickness);
     commands.push(currentLine);
   } else {
     const sticker = new StickerCommand(e.offsetX, e.offsetY, currentTool);
     commands.push(sticker);
-    // allow dragging to reposition sticker
-    currentLine = sticker as unknown as LineCommand;
+    currentLine = sticker;
   }
-  redoCommands.splice(0, redoCommands.length);
+  redoCommands.length = 0;
   notify("drawing-changed");
 });
 
-myCanvas.addEventListener("mousemove", (e: MouseEvent) => {
+myCanvas.addEventListener("mousemove", (e) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
   notify("cursor-changed");
 
-  // update or create tool preview when not drawing
   if (!currentLine) {
     if (currentTool === "marker") {
-      if (toolPreview) {
-        (toolPreview as ToolPreview).update(
-          e.offsetX,
-          e.offsetY,
-          currentThickness,
-        );
-      } else {
-        toolPreview = new ToolPreview(e.offsetX, e.offsetY, currentThickness);
-      }
+      toolPreview ??= new ToolPreview(e.offsetX, e.offsetY, currentThickness);
+      (toolPreview as ToolPreview).update(
+        e.offsetX,
+        e.offsetY,
+        currentThickness,
+      );
     } else {
-      if (toolPreview) {
-        (toolPreview as StickerPreview).update(
-          e.offsetX,
-          e.offsetY,
-          currentThickness,
-          currentTool,
-        );
-      } else {
-        toolPreview = new StickerPreview(e.offsetX, e.offsetY, currentTool);
-      }
+      toolPreview ??= new StickerPreview(e.offsetX, e.offsetY, currentTool);
+      (toolPreview as StickerPreview).update(
+        e.offsetX,
+        e.offsetY,
+        currentThickness,
+        currentTool,
+      );
     }
     notify("tool-moved");
   }
 
-  if (e.buttons == 1 && currentLine) {
-    if (isDraggable(currentLine)) {
-      currentLine.drag(e.offsetX, e.offsetY);
-    }
+  if (e.buttons === 1 && currentLine && isDraggable(currentLine)) {
+    currentLine.drag(e.offsetX, e.offsetY);
     notify("drawing-changed");
   }
 });
@@ -319,116 +262,97 @@ function makeButton(text: string) {
   document.body.append(b);
   return b;
 }
-
 function makeToolButton(text: string) {
   const b = makeButton(text);
-  b.setAttribute("data-tool-button", "1");
+  b.dataset.toolButton = "1";
   return b;
 }
-
 function makeThicknessButton(text: string) {
   const b = makeButton(text);
-  b.setAttribute("data-thickness-button", "1");
+  b.dataset.thicknessButton = "1";
   return b;
 }
 
 //
-// --- UI Buttons (grouped logically) -------------------------------
+// --- UI Buttons ----------------------------------------------------
 //
-
-// -- Tool + thickness row (marker + thin/thick)
 const markerButton = makeToolButton("marker");
-markerButton.addEventListener("click", () => {
+markerButton.onclick = () => {
   currentTool = "marker";
-
-  // visually mark tool and thickness according to remembered thickness
   selectToolButton(markerButton);
-  if (lastThickness === 4) {
-    selectThicknessButton(thinButton);
-  } else {
-    selectThicknessButton(thickButton);
-  }
-
-  // ensure currentThickness matches lastThickness when returning to marker
   currentThickness = lastThickness;
+  selectThicknessButton(lastThickness === 4 ? thinButton : thickButton);
   notify("tool-moved");
-});
+};
 
-// thickness buttons (always update remembered thickness; highlight only when marker active)
 const thinButton = makeThicknessButton("thin");
-thinButton.addEventListener("click", () => {
-  lastThickness = 4;
-  currentThickness = 4;
-  // highlight thin only if marker is currently selected
+thinButton.onclick = () => {
+  lastThickness = currentThickness = 4;
   if (currentTool === "marker") selectThicknessButton(thinButton);
-  notify("drawing-changed");
-});
+};
 
 const thickButton = makeThicknessButton("thick");
-thickButton.addEventListener("click", () => {
-  lastThickness = 8;
-  currentThickness = 8;
+thickButton.onclick = () => {
+  lastThickness = currentThickness = 8;
   if (currentTool === "marker") selectThicknessButton(thickButton);
-  notify("drawing-changed");
-});
+};
 
-// -- Sticker row
+// Stickers (data-driven)
+stickers.forEach(makeStickerButton);
 function makeStickerButton(emoji: string) {
   const b = makeToolButton(emoji);
-  b.addEventListener("click", () => {
+  b.onclick = () => {
     currentTool = emoji;
-    // select only the sticker (tool) and clear thickness highlighting
     selectToolButton(b);
     clearThicknessSelections();
     toolPreview = null;
     notify("tool-moved");
-  });
+  };
   return b;
 }
 
-makeStickerButton("🌟");
-makeStickerButton("🔥");
-makeStickerButton("🎯");
+// Create real custom sticker button
+const customBtn = makeToolButton("Custom sticker text");
+customBtn.id = "customStickerBtn";
+customBtn.onclick = () => {
+  const s = prompt("Custom sticker text", "🧽");
+  if (!s) return;
+  stickers.push(s);
+  makeStickerButton(s);
+};
 
-// -- History row (undo/redo/clear)
+//
+// --- Undo / Redo / Clear ------------------------------------------
+//
 const undoButton = makeButton("undo");
-undoButton.addEventListener("click", () => {
-  undo();
-});
+undoButton.onclick = undo;
 
 const redoButton = makeButton("redo");
-redoButton.addEventListener("click", () => {
-  redo();
-});
+redoButton.onclick = redo;
 
 const clearButton = makeButton("clear");
-clearButton.addEventListener("click", () => {
-  commands.splice(0, commands.length);
+clearButton.onclick = () => {
+  commands.length = 0;
   redoCommands.length = 0;
   notify("drawing-changed");
-});
+};
 
 function undo() {
-  if (commands.length === 0) return;
-  const popped = commands.pop();
-  if (popped) redoCommands.push(popped);
+  if (!commands.length) return;
+  redoCommands.push(commands.pop()!);
   notify("drawing-changed");
 }
 
 function redo() {
-  if (redoCommands.length === 0) return;
-  const popped = redoCommands.pop();
-  if (popped) commands.push(popped);
+  if (!redoCommands.length) return;
+  commands.push(redoCommands.pop()!);
   notify("drawing-changed");
 }
 
 //
-// --- Default startup state ----------------------------------------
+// --- Default startup ----------------------------------------------
 //
-currentThickness = 4;
-lastThickness = 4;
 currentTool = "marker";
-// visually select marker + thin
 selectToolButton(markerButton);
 selectThicknessButton(thinButton);
 notify("tool-moved");
