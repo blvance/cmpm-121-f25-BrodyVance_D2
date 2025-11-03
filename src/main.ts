@@ -350,6 +350,43 @@ function redo() {
 }
 
 //
+// --- Export Function ----------------------------------------------
+//
+const exportButton = makeButton("export"); // New button
+exportButton.onclick = exportDrawing;
+
+function exportDrawing() {
+  // 1. Temporarily create a new canvas object of size 1024x1024.
+  const exportCanvas = document.createElement("canvas");
+  const EXPORT_SIZE = 1024;
+  const SCALE_FACTOR = EXPORT_SIZE / myCanvas.width; // 1024 / 256 = 4
+
+  exportCanvas.width = EXPORT_SIZE;
+  exportCanvas.height = EXPORT_SIZE;
+
+  const exportCtx = exportCanvas.getContext("2d")!;
+
+  // 2. Prepare the CanvasRenderingContext2D object, using scale(x,y).
+  // The canvas is 4x larger, so we scale the context by 4.
+  exportCtx.scale(SCALE_FACTOR, SCALE_FACTOR);
+
+  // 3. Execute all of the items on the display list against this new canvas.
+  commands.forEach((cmd) => cmd.display(exportCtx));
+  // Note: We skip cursor and toolPreview commands as requested.
+
+  // 4. Trigger a file download with the contents of this canvas as a PNG file.
+  const dataURL = exportCanvas.toDataURL("image/png");
+  const a = document.createElement("a");
+  a.href = dataURL;
+  a.download = "drawing-export.png";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // Clean up the temporary canvas (optional, but good practice)
+  exportCanvas.remove();
+}
+//
 // --- Default startup ----------------------------------------------
 //
 currentTool = "marker";

@@ -24,3 +24,12 @@ This update improves user feedback by providing a visual indicator of the tool�
 Step 8 complete
 Implemented Step 8 by adding multiple sticker tools (🚀🐱🌸) with dynamic preview and placement features. Introduced StickerCommand and StickerPreview classes to handle sticker rendering, position tracking, and real-time movement updates during user interaction. Integrated sticker selection into the existing tool system to support seamless switching between stickers and other tools. Updated mouse event handling to enable precise sticker placement and dragging, added visual feedback for hover and tool selection, and refined the display list to ensure stickers render consistently alongside other commands.
 Bug fixes for sticker and marker selection, code order refractoring, as well as making the marker tool remember the users last thickness and saves it.
+
+Step 9 complete
+Made sure stickers had a data driven design and that the user could have their own custom stickers. User can now create several custom stickers. Updated style.css to change to default look of the buttons because they were annoying me. Also made it so the marker UI interatcion shows that marker is selected and thin/thick so the user knows the thin/thick tools are connected to the marker tool specifically.
+Added an "export" button and linked it to exportDrawing.
+Created a temporary 1024x1024 canvas and its context.
+Used exportCtx.scale(4, 4) to prepare the context for high-res drawing.
+Executed commands.forEach((cmd) => cmd.display(exportCtx)) to draw the content.
+Used toDataURL and an anchor tag to trigger the file download.
+I also made a necessary correction in the StickerCommand class: when the context is scaled up 4x for the export, text/font sizes must be scaled down 4x inside the display method to maintain the intended visual size in the final 1024x1024 image.
