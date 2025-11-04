@@ -19,6 +19,12 @@ document.body.innerHTML = `
         <button id="thinButton" data-thickness-button="1">thin</button>
         <button id="thickButton" data-thickness-button="1">thick</button>
       </fieldset>
+
+      <fieldset id="colorControls">
+        <legend>Color</legend>
+        <input type="range" id="colorSlider" min="0" max="360" value="0">
+        <div id="colorSwatch"></div>
+      </fieldset>
     </div>
 
     <div class="control-row" id="sticker-tools">
@@ -44,7 +50,6 @@ document.body.innerHTML = `
 `;
 
 // --- Fetch DOM Elements ---------------------------------------------//
-// (This section is unchanged, all IDs are the same)
 const myCanvas = document.getElementById("myCanvas") as HTMLCanvasElement;
 const ctx = myCanvas.getContext("2d")!;
 // Tool Buttons
@@ -68,8 +73,15 @@ const exportButton = document.getElementById(
   "exportButton",
 ) as HTMLButtonElement;
 
+const colorControls = document.getElementById(
+  "colorControls",
+) as HTMLFieldSetElement;
+const colorSlider = document.getElementById(
+  "colorSlider",
+) as HTMLInputElement;
+const colorSwatch = document.getElementById("colorSwatch") as HTMLDivElement;
+
 //// --- Global state & event bus --------------------------------------//
-// (This section is unchanged)
 const bus = new EventTarget();
 // Drawing state
 const commands: Drawable[] = [];
@@ -81,9 +93,9 @@ let STROKE_WIDTH = 4; // default marker thickness
 let lastThickness = 4;
 let currentTool: "marker" | string = "marker";
 let toolPreview: Drawable | null = null;
+let currentColor = "hsl(0, 100%, 50%)"; // Default red
 
 //// --- Utilities & helpers -------------------------------------------//
-// (This section is unchanged)
 function notify(name: string) {
   bus.dispatchEvent(new Event(name));
 }
@@ -114,7 +126,6 @@ function selectThicknessButton(button: HTMLButtonElement) {
 }
 
 //// --- Rendering -----------------------------------------------------//
-// (This section is unchanged)
 function redraw() {
   ctx.clearRect(0, 0, myCanvas.width, myCanvas.height);
 
@@ -133,7 +144,6 @@ function tick() {
 tick();
 
 //// --- Types & Drawable classes -------------------------------------//
-// (This section is unchanged)
 type Point = { x: number; y: number };
 interface Drawable {
   display(ctx: CanvasRenderingContext2D): void;
@@ -180,7 +190,12 @@ class StickerPreview implements Drawable {
 }
 class LineCommand implements DraggableDrawable {
   private points: Point[] = [];
-  constructor(x: number, y: number, private thickness: number) {
+  constructor(
+    x: number,
+    y: number,
+    private thickness: number,
+    private color: string, // Stores the color
+  ) {
     this.points.push({ x, y });
   }
   drag(x: number, y: number) {
@@ -188,14 +203,20 @@ class LineCommand implements DraggableDrawable {
   }
   display(ctx: CanvasRenderingContext2D) {
     if (this.points.length < 2) return;
+
+    ctx.save(); // Start new state
     ctx.lineWidth = this.thickness;
     ctx.lineCap = "round";
+
+    ctx.strokeStyle = this.color;
+
     ctx.beginPath();
     ctx.moveTo(this.points[0].x, this.points[0].y);
     for (let i = 1; i < this.points.length; i++) {
       ctx.lineTo(this.points[i].x, this.points[i].y);
     }
     ctx.stroke();
+    ctx.restore(); // Restore state
   }
 }
 class CursorCommand implements Drawable {
@@ -211,11 +232,13 @@ class ToolPreview implements Drawable {
     private x: number,
     private y: number,
     private thickness: number,
+    public color: string,
   ) {}
-  update(x: number, y: number, thickness: number) {
+  update(x: number, y: number, thickness: number, color: string) {
     this.x = x;
     this.y = y;
     this.thickness = thickness;
+    this.color = color;
   }
   display(ctx: CanvasRenderingContext2D) {
     const r = Math.max(1, this.thickness / 2);
@@ -229,7 +252,6 @@ class ToolPreview implements Drawable {
 }
 
 //// --- Mouse Handling ------------------------------------------------//
-// (This section is unchanged)
 myCanvas.addEventListener("mouseout", () => {
   cursor = null;
   toolPreview = null;
@@ -240,7 +262,7 @@ myCanvas.addEventListener("mouseout", () => {
 myCanvas.addEventListener("mouseenter", (e) => {
   cursor = new CursorCommand(e.offsetX, e.offsetY);
   toolPreview = currentTool === "marker"
-    ? new ToolPreview(e.offsetX, e.offsetY, STROKE_WIDTH)
+    ? new ToolPreview(e.offsetX, e.offsetY, STROKE_WIDTH, currentColor) // Pass color
     : new StickerPreview(e.offsetX, e.offsetY, currentTool);
   notify("cursor-changed");
   notify("tool-moved");
@@ -248,7 +270,13 @@ myCanvas.addEventListener("mouseenter", (e) => {
 
 myCanvas.addEventListener("mousedown", (e) => {
   if (currentTool === "marker") {
-    currentLine = new LineCommand(e.offsetX, e.offsetY, STROKE_WIDTH);
+    // Pass color to the new LineCommand
+    currentLine = new LineCommand(
+      e.offsetX,
+      e.offsetY,
+      STROKE_WIDTH,
+      currentColor,
+    );
     commands.push(currentLine);
   } else {
     const sticker = new StickerCommand(e.offsetX, e.offsetY, currentTool);
@@ -265,11 +293,17 @@ myCanvas.addEventListener("mousemove", (e) => {
 
   if (!currentLine) {
     if (currentTool === "marker") {
-      toolPreview ??= new ToolPreview(e.offsetX, e.offsetY, STROKE_WIDTH);
+      toolPreview ??= new ToolPreview(
+        e.offsetX,
+        e.offsetY,
+        STROKE_WIDTH,
+        currentColor, // Pass color
+      );
       (toolPreview as ToolPreview).update(
         e.offsetX,
         e.offsetY,
         STROKE_WIDTH,
+        currentColor, // Pass color
       );
     } else {
       toolPreview ??= new StickerPreview(e.offsetX, e.offsetY, currentTool);
@@ -295,7 +329,6 @@ myCanvas.addEventListener("mouseup", () => {
 });
 
 //// --- Sticker Button Creation Logic --------------------------------------//
-// (This section is unchanged)
 function makeStickerButton(emoji: string) {
   const b = document.createElement("button");
   b.innerHTML = emoji;
@@ -305,20 +338,39 @@ function makeStickerButton(emoji: string) {
     selectToolButton(b);
     clearThicknessSelections();
     toolPreview = null;
+    // HIDE color controls when a sticker is selected
+    colorControls.style.display = "none";
     notify("tool-moved");
   };
-  stickerButtonContainer.append(b); // Append to the new container
+  stickerButtonContainer.append(b);
   return b;
 }
 stickers.forEach(makeStickerButton);
 
 //// --- UI Button Event Handlers ------------------------------------//
-// (This section is unchanged)
+
+// NEW: Add event listener for the color slider
+colorSlider.oninput = () => {
+  // 1. Update the global color using HSL (Hue, Saturation, Lightness)
+  currentColor = `hsl(${colorSlider.value}, 100%, 50%)`;
+
+  // 2. Update the visual swatch
+  colorSwatch.style.backgroundColor = currentColor;
+
+  // 3. If the tool preview is currently visible (and it's a marker preview), update its color
+  if (toolPreview instanceof ToolPreview) {
+    toolPreview.color = currentColor;
+    notify("tool-moved");
+  }
+};
+
 markerButton.onclick = () => {
   currentTool = "marker";
   selectToolButton(markerButton);
   STROKE_WIDTH = lastThickness;
   selectThicknessButton(lastThickness === 4 ? thinButton : thickButton);
+  // SHOW color controls when the marker is selected
+  colorControls.style.display = "flex";
   notify("tool-moved");
 };
 
@@ -339,15 +391,17 @@ customStickerBtn.onclick = () => {
   makeStickerButton(s);
 };
 
+// Ensure action buttons are connected
 undoButton.onclick = undo;
 redoButton.onclick = redo;
-exportButton.onclick = exportDrawing; // Added this line, it was missing in your original code
-
 clearButton.onclick = () => {
   commands.length = 0;
   redoCommands.length = 0;
   notify("drawing-changed");
 };
+exportButton.onclick = exportDrawing;
+
+// Implementations for undo/redo (if not already defined elsewhere)
 function undo() {
   if (!commands.length) return;
   redoCommands.push(commands.pop()!);
@@ -360,9 +414,7 @@ function redo() {
 }
 
 //// --- Export Function ----------------------------------------------//
-// (This section is unchanged)
 function exportDrawing() {
-  // 1. Temporarily create a new canvas object of size 1024x1024.
   const exportCanvas = document.createElement("canvas");
   const EXPORT_SIZE = 1024;
   const SCALE_FACTOR = EXPORT_SIZE / myCanvas.width; // 1024 / 256 = 4
@@ -372,13 +424,10 @@ function exportDrawing() {
 
   const exportCtx = exportCanvas.getContext("2d")!;
 
-  // 2. Prepare the CanvasRenderingContext2D object, using scale(x,y).
   exportCtx.scale(SCALE_FACTOR, SCALE_FACTOR);
 
-  // 3. Execute all of the items on the display list against this new canvas.
   commands.forEach((cmd) => cmd.display(exportCtx));
 
-  // 4. Trigger a file download with the contents of this canvas as a PNG file.
   const dataURL = exportCanvas.toDataURL("image/png");
   const a = document.createElement("a");
   a.href = dataURL;
@@ -391,8 +440,10 @@ function exportDrawing() {
 }
 
 //// --- Default startup ----------------------------------------------//
-// (This section is unchanged)
 currentTool = "marker";
 selectToolButton(markerButton);
 selectThicknessButton(thinButton);
+// NEW: Set initial UI state for color
+colorControls.style.display = "flex";
+colorSwatch.style.backgroundColor = currentColor;
 notify("tool-moved");

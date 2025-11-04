@@ -77,3 +77,22 @@ button.selectedTool {
 #sticker-buttons {
   display: contents; /* This makes the buttons act as direct children of the fieldset */
 }
+
+#colorControls {
+  /* Aligns the slider and the swatch nicely */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#colorSlider {
+  flex-grow: 1; /* Lets the slider take up available space */
+}
+
+#colorSwatch {
+  width: 25px;
+  height: 25px;
+  border: 1px solid #999;
+  border-radius: 4px;
+  background-color: red; /* Default, will be updated by JS */
+}
